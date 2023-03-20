@@ -1,0 +1,47 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+
+contract RoyaltyPayment is ERC721 {
+    mapping(uint256 => uint256) public tokenIdToTimestamp;
+    uint256 public royaltyPercentage; // Процент роялти
+    uint256 public lastPayoutTimestamp;
+    address public owner;
+    uint256 public totalAmountPaid;
+
+    constructor(string memory _name, string memory _symbol, uint256 _royaltyPercentage) ERC721(_name, _symbol) {
+        royaltyPercentage = _royaltyPercentage;
+        owner = msg.sender;
+    }
+
+    function mint() public {
+        _mint(msg.sender, totalSupply() + 1);
+    }
+
+    function payoutRoyalties() public {
+        require(msg.sender == owner, "Only owner can call this function");
+        uint256 totalRoyalties = address(this).balance;
+        require(totalRoyalties > 0, "No royalties to payout");
+        uint256 payoutAmount = totalRoyalties / (block.timestamp - lastPayoutTimestamp);
+        lastPayoutTimestamp = block.timestamp;
+        totalAmountPaid += payoutAmount;
+        for (uint256 i = 0; i < totalSupply(); i++) {
+            if (tokenIdToTimestamp[tokenByIndex(i)] > lastPayoutTimestamp) {
+                payable(ownerOf(tokenByIndex(i))).transfer((balanceOf(ownerOf(tokenByIndex(i))) * payoutAmount * royaltyPercentage) / (10000));
+            }
+        }
+    }
+
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId) internal override {
+        if (from == address(0)) {
+            tokenIdToTimestamp[tokenId] = block.timestamp;
+        }
+        super._beforeTokenTransfer(from, to, tokenId);
+    }
+
+    function withdraw() public {
+        require(msg.sender == owner, "Only owner can call this function");
+        payable(msg.sender).transfer(address(this).balance);
+    }
+}
